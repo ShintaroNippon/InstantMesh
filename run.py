@@ -12,6 +12,7 @@ from tqdm import tqdm
 from huggingface_hub import hf_hub_download
 from diffusers import DiffusionPipeline
 from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
+from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
 
 from src.utils.train_util import instantiate_from_config
 from src.utils.camera_util import (
@@ -97,9 +98,8 @@ device = torch.device('cuda')
 
 # load diffusion model
 print('Loading diffusion model ...')
-pipeline = DiffusionPipeline.from_pretrained(
-    "sudo-ai/zero123plus-v1.2", 
-    custom_pipeline="zero123plus",
+pipeline = Zero123PlusPipeline.from_pretrained(
+    "sudo-ai/zero123plus-v1.2",
     torch_dtype=torch.float16,
 )
 pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(
