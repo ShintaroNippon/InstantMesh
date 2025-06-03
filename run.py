@@ -4,13 +4,14 @@ import numpy as np
 import torch
 import rembg
 from PIL import Image
-from torchvision.transforms import v2
+from torchvision import transforms
 from pytorch_lightning import seed_everything
 from omegaconf import OmegaConf
 from einops import rearrange, repeat
 from tqdm import tqdm
 from huggingface_hub import hf_hub_download
-from diffusers import DiffusionPipeline, EulerAncestralDiscreteScheduler
+from diffusers import DiffusionPipeline
+from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
 
 from src.utils.train_util import instantiate_from_config
 from src.utils.camera_util import (
