@@ -134,12 +134,12 @@ def main():
         raise
     
     num_views = images.shape[0]
-    cameras = torch.eye(4, device=device, dtype=torch.float16).unsqueeze(0).repeat(num_views, 1, 1)
-    cameras = cameras.view(num_views, -1)  # Flatten to [num_views, 16]
+    cameras = torch.eye(4, device=device, dtype=torch.float16).unsqueeze(0).repeat(num_views, 1, 1)  # [num_views, 4, 4]
+    cameras = cameras.view(num_views, -1).unsqueeze(0)  # [1, num_views, 16]
     render_cameras = cameras.clone()
     render_size = 512
     
-    print(f"Cameras shape: {cameras.shape}, Render cameras shape: {render_cameras.shape}, Render size: {render_size}")
+    print(f"Cameras shape after reshape: {cameras.shape}, Render cameras shape: {render_cameras.shape}, Render size: {render_size}")
     
     print("Loading InstantMesh model")
     try:
