@@ -10,7 +10,7 @@ import torchvision.transforms.v2 as v2
 from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
 import trimesh
 import xatlas
-from models.lrm import InstantNeRF
+from src.models.lrm_mesh import InstantMesh
 from utils.mesh_util import xatlas_uvmap
 
 def read_image(image_path):
@@ -39,15 +39,15 @@ def load_checkpoint(config):
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     
-    # Validate config has 'model' key
-    if not hasattr(config, 'model'):
-        raise ValueError(f"Configuration is missing 'model' key: {config}")
+    # Validate config has 'model_config' key
+    if not hasattr(config, 'model_config'):
+        raise ValueError(f"Configuration is missing 'model_config' key: {config}")
     
     # Initialize model
     try:
-        model = InstantNeRF(config.model).to('cpu')
+        model = InstantMesh(config.model_config).to('cpu')
     except Exception as e:
-        print(f"Failed to initialize InstantNeRF: {str(e)}")
+        print(f"Failed to initialize InstantMesh: {str(e)}")
         raise
     
     # Load checkpoint
@@ -62,8 +62,8 @@ def load_checkpoint(config):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run InstantMesh for 3D model generation")
-    parser.add_argument('--config', type=str, default='configs/instant-nerf-large.yaml',
-                        help='Path to config yaml file (default: configs/instant-nerf-large.yaml)')
+    parser.add_argument('--config', type=str, default='configs/instant-mesh-large.yaml',
+                        help='Path to config yaml file (default: configs/instant-mesh-large.yaml)')
     parser.add_argument('input_path', type=str, help='Path to input image')
     parser.add_argument('--output_path', type=str, default='output', help='Output directory')
     parser.add_argument('--no_rembg', action='store_true', help='Do not remove background')
@@ -145,7 +145,7 @@ def main():
         raise
     
     # Load model
-    print("Loading InstantNeRF model")
+    print("Loading InstantMesh model")
     try:
         model = load_checkpoint(config)
         model = model.to(device, torch.float16 if device == 'cuda' else torch.float32)
