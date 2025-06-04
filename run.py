@@ -26,7 +26,7 @@ def save_mesh(mesh_data, path, export_texmap=False):
     mesh.export(path)
 
 def load_checkpoint(config):
-    checkpoint_path = os.path.join(os.path.dirname(__file__), 'checkpoints', 'instant_mesh_large.ckpt')
+    checkpoint_path = "/teamspace/studios/this_studio/InstantMesh/checkpoints/instant_mesh_large.ckpt"
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     model = InstantNeRF(config.model).to('cpu')
@@ -62,14 +62,18 @@ def main():
         save_image(image, os.path.join(args.output_path, 'input.png'))
     
     # Initialize pipeline
-    pipe = Zero123PlusPipeline.from_pretrained(
-        "sudo-ai/zero123plus-v1.2",
-        torch_dtype=torch.float16,
-        scheduler=EulerAncestralDiscreteScheduler.from_config(
+    try:
+        pipe = Zero123PlusPipeline.from_pretrained(
+            "sudo-ai/zero123plus-v1.2",
+            torch_dtype=torch.float16
+        )
+        scheduler = EulerAncestralDiscreteScheduler.from_config(
             pipe.scheduler.config, timestep_spacing='trailing'
         )
-    )
-    pipe = pipe.to('cuda')
+        pipe.scheduler = scheduler
+        pipe = pipe.to('cuda')
+    except Exception as e:
+        raise RuntimeError(f"Failed to initialize Zero123PlusPipeline: {str(e)}")
     
     # Generate multi-view images
     transform = transforms.Compose([
