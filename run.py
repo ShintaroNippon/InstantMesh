@@ -10,7 +10,8 @@ import torchvision.transforms.v2 as v2
 from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
 import trimesh
 import xatlas
-from models.lrm import LargeResolutionModel  # Import LRM from local src
+from models.lrm import LargeResolutionModel
+from utils.mesh_util import xatlas_uvmap  # Absolute import
 
 def read_image(image_path):
     return Image.open(image_path).convert('RGBA')
@@ -21,14 +22,14 @@ def save_image(image, path):
 def save_mesh(mesh_data, path, export_texmap=False):
     mesh = trimesh.Trimesh(vertices=mesh_data['vertices'], faces=mesh_data['faces'])
     if export_texmap and 'uvs' in mesh_data:
-        xatlas.parametrize(mesh, uvs=mesh_data['uvs'])
+        xatlas_uvmap(mesh, uvs=mesh_data['uvs'])
     mesh.export(path)
 
 def load_checkpoint(config):
     checkpoint_path = os.path.join(os.path.dirname(__file__), 'checkpoints', 'instant_mesh_large.ckpt')
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-    model = LargeResolutionModel(config.model).to('cpu')  # Initialize LRM
+    model = LargeResolutionModel(config.model).to('cpu')
     checkpoint = torch.load(checkpoint_path, map_location='cpu')
     model.load_state_dict(checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint)
     return model
