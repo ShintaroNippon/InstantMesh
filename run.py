@@ -53,7 +53,23 @@ def load_checkpoint(config):
     # Load checkpoint
     try:
         checkpoint = torch.load(checkpoint_path, map_location='cpu')
-        model.load_state_dict(checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint)
+        # Debug: Print checkpoint keys
+        print(f"Checkpoint keys: {list(checkpoint.keys())}")
+        # Handle different checkpoint structures
+        state_dict = None
+        if 'state_dict' in checkpoint:
+            print("Found 'state_dict' key in checkpoint")
+            state_dict = checkpoint['state_dict']
+        elif 'model_state_dict' in checkpoint:
+            print("Found 'model_state_dict' key in checkpoint")
+            state_dict = checkpoint['model_state_dict']
+        else:
+            print("Using checkpoint directly as state_dict")
+            state_dict = checkpoint
+        
+        # Load state_dict into model
+        model.load_state_dict(state_dict, strict=False)
+        print("Checkpoint loaded successfully")
     except Exception as e:
         print(f"Failed to load checkpoint state dict: {str(e)}")
         raise
