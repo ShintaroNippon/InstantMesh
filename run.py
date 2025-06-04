@@ -10,8 +10,8 @@ import torchvision.transforms.v2 as v2
 from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
 import trimesh
 import xatlas
-from models.lrm import LargeResolutionModel
-from utils.mesh_util import xatlas_uvmap  # Absolute import
+from models.lrm import InstantNeRF
+from utils.mesh_util import xatlas_uvmap
 
 def read_image(image_path):
     return Image.open(image_path).convert('RGBA')
@@ -29,7 +29,7 @@ def load_checkpoint(config):
     checkpoint_path = os.path.join(os.path.dirname(__file__), 'checkpoints', 'instant_mesh_large.ckpt')
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-    model = LargeResolutionModel(config.model).to('cpu')
+    model = InstantNeRF(config.model).to('cpu')
     checkpoint = torch.load(checkpoint_path, map_location='cpu')
     model.load_state_dict(checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint)
     return model
