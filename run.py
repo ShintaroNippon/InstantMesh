@@ -14,19 +14,28 @@ from models.lrm import InstantNeRF
 from utils.mesh_util import xatlas_uvmap
 
 def read_image(image_path):
+    print(f"Reading image: {image_path}")
     return Image.open(image_path).convert('RGBA')
 
 def save_image(image, path):
+    print(f"Saving image to: {path}")
     image.save(path, format='PNG')
 
 def save_mesh(mesh_data, path, export_texmap=False):
-    mesh = trimesh.Trimesh(vertices=mesh_data['vertices'], faces=mesh_data['faces'])
-    if export_texmap and 'uvs' in mesh_data:
-        xatlas_uvmap(mesh, uvs=mesh_data['uvs'])
-    mesh.export(path)
+    print(f"Saving mesh to: {path}")
+    try:
+        mesh = trimesh.Trimesh(vertices=mesh_data['vertices'], faces=mesh_data['faces'])
+        if export_texmap and 'uvs' in mesh_data:
+            print("Exporting texture map")
+            xatlas_uvmap(mesh, uvs=mesh_data['uvs'])
+        mesh.export(path)
+    except Exception as e:
+        print(f"Failed to save mesh: {str(e)}")
+        raise
 
 def load_checkpoint(config):
     checkpoint_path = "/teamspace/studios/this_studio/InstantMesh/checkpoints/instant_mesh_large.ckpt"
+    print(f"Loading checkpoint: {checkpoint_path}")
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     model = InstantNeRF(config.model).to('cpu')
@@ -45,6 +54,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    print(f"Config: {args.config}, Input: {args.input_path}, Output: {args.output_path}")
     config = OmegaConf.load(args.config)
     os.makedirs(args.output_path, exist_ok=True)
     
@@ -56,6 +66,7 @@ def main():
     # Load and preprocess image
     image = read_image(args.input_path)
     if not args.no_rembg:
+        print("Removing background")
         image = rembg.remove(image)
         save_image(image, os.path.join(args.output_path, 'input.png'))
     else:
@@ -63,6 +74,7 @@ def main():
     
     # Initialize pipeline
     try:
+        print("Initializing Zero123PlusPipeline")
         pipe = Zero123PlusPipeline.from_pretrained(
             "sudo-ai/zero123plus-v1.2",
             torch_dtype=torch.float16
@@ -72,10 +84,13 @@ def main():
         )
         pipe.scheduler = scheduler
         pipe = pipe.to('cuda')
+        print("Pipeline moved to CUDA")
     except Exception as e:
-        raise RuntimeError(f"Failed to initialize Zero123PlusPipeline: {str(e)}")
+        print(f"Failed to initialize pipeline: {str(e)}")
+        raise
     
     # Generate multi-view images
+    print("Generating multi-view images")
     with torch.no_grad():
         result = pipe(image)
         mv_images = result.images  # List of PIL Images or single PIL Image
@@ -84,7 +99,7 @@ def main():
     if isinstance(mv_images, list):
         mv_images_np = np.stack([np.array(img) for img in mv_images])  # [num_views, H, W, C]
     else:
-        mv_images_np = np.array(mv_images)[None, ...]  # Add batch dimension: [1, H, W, C]
+        mv_images_np = np.array(mv_images)[None, ...]  # [1, H, W, C]
     
     print(f"mv_images_np shape: {mv_images_np.shape}")
     
@@ -93,16 +108,34 @@ def main():
         transforms.ToTensor(),  # Converts [H, W, C] to [C, H, W]
         transforms.Normalize([0.5], [0.5])
     ])
-    images = torch.stack([transform(img) for img in mv_images_np]).to('cuda', torch.float16)  # [num_views, C, H, W]
-    images = v2.functional.resize(images, 320, interpolation=3, antialias=True).clamp(0, 1)
+    try:
+        images = torch.stack([transform(img) for img in mv_images_np]).to('cuda', torch.float16)  # [num_views, C, H, W]
+        print(f"Images tensor shape: {images.shape}")
+        images = v2.functional.resize(images, 320, interpolation=3, antialias=True).clamp(0, 1)
+        print("Images resized")
+    except Exception as e:
+        print(f"Failed to preprocess images: {str(e)}")
+        raise
     
     # Load model
-    model = load_checkpoint(config).to('cuda', torch.float16)
-    model.eval()
+    print("Loading InstantNeRF model")
+    try:
+        model = load_checkpoint(config).to('cuda', torch.float16)
+        model.eval()
+        print("Model loaded and set to eval")
+    except Exception as e:
+        print(f"Failed to load model: {str(e)}")
+        raise
     
     # Generate mesh
-    with torch.no_grad():
-        mesh_data = model(images)
+    print("Generating mesh")
+    try:
+        with torch.no_grad():
+            mesh_data = model(images)
+            print(f"Mesh data keys: {mesh_data.keys()}")
+    except Exception as e:
+        print(f"Failed to generate mesh: {str(e)}")
+        raise
     
     # Save mesh
     output_subdir = os.path.join(args.output_path, 'instant-mesh-large', 'meshes')
@@ -112,5 +145,5 @@ def main():
     
     print(f"Saved mesh to {mesh_path}")
 
-if __name__ == '__module__':
+if __name__ == '__main__':
     main()
