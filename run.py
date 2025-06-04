@@ -127,8 +127,9 @@ def main():
     ])
     try:
         images = torch.stack([transform(img) for img in mv_images_np]).to(device, torch.float16)
-        print(f"Images tensor shape: {images.shape}")
-        images = v2.functional.resize(images, 320, interpolation=3, antialias=True).clamp(0, 1)
+        print(f"Images tensor shape before resize: {images.shape}")
+        images = v2.functional.resize(images, [640, 640], interpolation=3, antialias=True).clamp(0, 1)
+        print(f"Images tensor shape after resize: {images.shape}")
     except Exception as e:
         print(f"Failed to preprocess images: {str(e)}")
         raise
