@@ -39,32 +39,19 @@ def load_checkpoint(config):
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     
-    # Validate config has 'model_config' key
     if not hasattr(config, 'model_config'):
         raise ValueError(f"Configuration is missing 'model_config' key: {config}")
     
-    # Initialize model
     try:
         model = InstantMesh(config.model_config).to('cpu')
     except Exception as e:
         print(f"Failed to initialize InstantMesh: {str(e)}")
         raise
     
-    # Load checkpoint
     try:
         checkpoint = torch.load(checkpoint_path, map_location='cpu')
         print(f"Checkpoint keys: {list(checkpoint.keys())}")
-        state_dict = None
-        if 'state_dict' in checkpoint:
-            print("Found 'state_dict' key in checkpoint")
-            state_dict = checkpoint['state_dict']
-        elif 'model_state_dict' in checkpoint:
-            print("Found 'model_state_dict' key in checkpoint")
-            state_dict = checkpoint['model_state_dict']
-        else:
-            print("Using checkpoint directly as state_dict")
-            state_dict = checkpoint
-        
+        state_dict = checkpoint.get('state_dict', checkpoint.get('model_state_dict', checkpoint))
         model.load_state_dict(state_dict, strict=False)
         print("Checkpoint loaded successfully")
     except Exception as e:
@@ -75,19 +62,17 @@ def load_checkpoint(config):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run InstantMesh for 3D model generation")
-    parser.add_argument('--config', type=str, default='configs/instant-mesh-large.yaml',
-                        help='Path to config yaml file (default: configs/instant-mesh-large.yaml)')
+    parser.add_argument('--config', type=str, default='configs/instant-mesh-large.yaml')
     parser.add_argument('input_path', type=str, help='Path to input image')
-    parser.add_argument('--output_path', type=str, default='output', help='Output directory')
-    parser.add_argument('--no_rembg', action='store_true', help='Do not remove background')
-    parser.add_argument('--export_texmap', action='store_true', help='Export texture map')
+    parser.add_argument('--output_path', type=str, default='output')
+    parser.add_argument('--no_rembg', action='store_true')
+    parser.add_argument('--export_texmap', action='store_true')
     return parser.parse_args()
 
 def main():
     args = parse_args()
     print(f"Config: {args.config}, Input: {args.input_path}, Output: {args.output_path}")
     
-    # Load and validate config
     try:
         config = OmegaConf.load(args.config)
         print(f"Loaded config: {config}")
@@ -97,21 +82,16 @@ def main():
     
     os.makedirs(args.output_path, exist_ok=True)
     
-    # Set seed
     seed = 42
     torch.manual_seed(seed)
     np.random.seed(seed)
     
-    # Load and preprocess image
     image = read_image(args.input_path)
     if not args.no_rembg:
         print("Removing background")
         image = rembg.remove(image)
-        save_image(image, os.path.join(args.output_path, 'input.png'))
-    else:
-        save_image(image, os.path.join(args.output_path, 'input.png'))
+    save_image(image, os.path.join(args.output_path, 'input.png'))
     
-    # Initialize pipeline
     try:
         print("Initializing Zero123PlusPipeline")
         pipe = Zero123PlusPipeline.from_pretrained(
@@ -129,54 +109,47 @@ def main():
         print(f"Failed to initialize pipeline: {str(e)}")
         raise
     
-    # Generate multi-view images
     print("Generating multi-view images")
     with torch.no_grad():
         result = pipe(image)
-        mv_images = result.images  # List of PIL Images or single PIL Image
+        mv_images = result.images
     
-    # Convert to NumPy array
     if isinstance(mv_images, list):
-        mv_images_np = np.stack([np.array(img) for img in mv_images])  # [num_views, H, W, C]
+        mv_images_np = np.stack([np.array(img) for img in mv_images])
     else:
-        mv_images_np = np.array(mv_images)[None, ...]  # [1, H, W, C]
+        mv_images_np = np.array(mv_images)[None, ...]
     
     print(f"mv_images_np shape: {mv_images_np.shape}")
     
-    # Convert to tensor and preprocess
     transform = transforms.Compose([
-        transforms.ToTensor(),  # Converts [H, W, C] to [C, H, W]
+        transforms.ToTensor(),
         transforms.Normalize([0.5], [0.5])
     ])
     try:
         images = torch.stack([transform(img) for img in mv_images_np]).to(device, torch.float16)
         print(f"Images tensor shape: {images.shape}")
         images = v2.functional.resize(images, 320, interpolation=3, antialias=True).clamp(0, 1)
-        print("Images resized")
     except Exception as e:
         print(f"Failed to preprocess images: {str(e)}")
         raise
     
-    # Setup camera parameters (placeholder, to be refined)
     num_views = images.shape[0]
-    cameras = torch.eye(4, device=device, dtype=torch.float16).unsqueeze(0).repeat(num_views, 1, 1)  # [num_views, 4, 4]
-    render_cameras = cameras.clone()  # Same as input cameras for now
-    render_size = 512  # From instant-mesh-large.yaml infer_config.render_resolution
+    cameras = torch.eye(4, device=device, dtype=torch.float16).unsqueeze(0).repeat(num_views, 1, 1)
+    cameras = cameras.view(num_views, -1)  # Flatten to [num_views, 16]
+    render_cameras = cameras.clone()
+    render_size = 512
     
     print(f"Cameras shape: {cameras.shape}, Render cameras shape: {render_cameras.shape}, Render size: {render_size}")
     
-    # Load model
     print("Loading InstantMesh model")
     try:
         model = load_checkpoint(config)
         model = model.to(device, torch.float16 if device == 'cuda' else torch.float32)
         model.eval()
-        print(f"Model loaded and set to eval on {device}")
     except Exception as e:
         print(f"Failed to load model: {str(e)}")
         raise
     
-    # Generate mesh
     print("Generating mesh")
     try:
         with torch.no_grad():
@@ -186,7 +159,6 @@ def main():
         print(f"Failed to generate mesh: {str(e)}")
         raise
     
-    # Save mesh
     output_subdir = os.path.join(args.output_path, 'instant-mesh-large', 'meshes')
     os.makedirs(output_subdir, exist_ok=True)
     mesh_path = os.path.join(output_subdir, os.path.splitext(os.path.basename(args.input_path))[0] + '.obj')
