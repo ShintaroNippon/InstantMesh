@@ -38,24 +38,50 @@ def load_checkpoint(config):
     print(f"Loading checkpoint: {checkpoint_path}")
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-    model = InstantNeRF(config.model).to('cpu')
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
-    model.load_state_dict(checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint)
+    
+    # Validate config has 'model' key
+    if not hasattr(config, 'model'):
+        raise ValueError(f"Configuration is missing 'model' key: {config}")
+    
+    # Initialize model
+    try:
+        model = InstantNeRF(config.model).to('cpu')
+    except Exception as e:
+        print(f"Failed to initialize InstantNeRF: {str(e)}")
+        raise
+    
+    # Load checkpoint
+    try:
+        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        model.load_state_dict(checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint)
+    except Exception as e:
+        print(f"Failed to load checkpoint state dict: {str(e)}")
+        raise
+    
     return model
 
 def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('config', type=str, help='Path to config yaml file.')
-    parser.add_argument('input_path', type=str, help='Path to input image.')
-    parser.add_argument('--output_path', type=str, default='output', help='Output directory.')
-    parser.add_argument('--no_rembg', action='store_true', help='Do not remove background.')
-    parser.add_argument('--export_texmap', action='store_true', help='Export texture map.')
+    parser = argparse.ArgumentParser(description="Run InstantMesh for 3D model generation")
+    parser.add_argument('--config', type=str, default='configs/instant-nerf-large.yaml',
+                        help='Path to config yaml file (default: configs/instant-nerf-large.yaml)')
+    parser.add_argument('input_path', type=str, help='Path to input image')
+    parser.add_argument('--output_path', type=str, default='output', help='Output directory')
+    parser.add_argument('--no_rembg', action='store_true', help='Do not remove background')
+    parser.add_argument('--export_texmap', action='store_true', help='Export texture map')
     return parser.parse_args()
 
 def main():
     args = parse_args()
     print(f"Config: {args.config}, Input: {args.input_path}, Output: {args.output_path}")
-    config = OmegaConf.load(args.config)
+    
+    # Load and validate config
+    try:
+        config = OmegaConf.load(args.config)
+        print(f"Loaded config: {config}")
+    except Exception as e:
+        print(f"Failed to load config file {args.config}: {str(e)}")
+        raise
+    
     os.makedirs(args.output_path, exist_ok=True)
     
     # Set seed
@@ -83,8 +109,9 @@ def main():
             pipe.scheduler.config, timestep_spacing='trailing'
         )
         pipe.scheduler = scheduler
-        pipe = pipe.to('cuda')
-        print("Pipeline moved to CUDA")
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        pipe = pipe.to(device)
+        print(f"Pipeline moved to {device}")
     except Exception as e:
         print(f"Failed to initialize pipeline: {str(e)}")
         raise
@@ -109,7 +136,7 @@ def main():
         transforms.Normalize([0.5], [0.5])
     ])
     try:
-        images = torch.stack([transform(img) for img in mv_images_np]).to('cuda', torch.float16)  # [num_views, C, H, W]
+        images = torch.stack([transform(img) for img in mv_images_np]).to(device, torch.float16)
         print(f"Images tensor shape: {images.shape}")
         images = v2.functional.resize(images, 320, interpolation=3, antialias=True).clamp(0, 1)
         print("Images resized")
@@ -120,9 +147,10 @@ def main():
     # Load model
     print("Loading InstantNeRF model")
     try:
-        model = load_checkpoint(config).to('cuda', torch.float16)
+        model = load_checkpoint(config)
+        model = model.to(device, torch.float16 if device == 'cuda' else torch.float32)
         model.eval()
-        print("Model loaded and set to eval")
+        print(f"Model loaded and set to eval on {device}")
     except Exception as e:
         print(f"Failed to load model: {str(e)}")
         raise
