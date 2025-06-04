@@ -10,6 +10,7 @@ import torchvision.transforms.v2 as v2
 from diffusers import DiffusionPipeline
 from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
 from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
+from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
 from instant3d.utils import read_image, save_image, save_mesh, load_checkpoint
 
 def parse_args():
