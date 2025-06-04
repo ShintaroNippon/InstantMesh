@@ -77,14 +77,15 @@ def main():
     
     # Generate multi-view images
     with torch.no_grad():
-        mv_images = pipe(image).images[0]  # Shape: [6, H, W, 3]
+        mv_images = pipe(image).images[0]  # PIL Image
     
-    # Convert to tensor and resize
+    # Convert PIL Image to NumPy array and then to tensor
+    mv_images_np = np.array(mv_images)  # Convert PIL Image to NumPy array
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize([0.5], [0.5])
     ])
-    images = torch.from_numpy(mv_images).permute(0, 3, 1, 2).to('cuda', torch.float16)
+    images = torch.from_numpy(mv_images_np).permute(0, 3, 1, 2).to('cuda', torch.float16)
     images = v2.functional.resize(images, 320, interpolation=3, antialias=True).clamp(0, 1)
     
     # Load model
