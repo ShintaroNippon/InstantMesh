@@ -53,9 +53,7 @@ def load_checkpoint(config):
     # Load checkpoint
     try:
         checkpoint = torch.load(checkpoint_path, map_location='cpu')
-        # Debug: Print checkpoint keys
         print(f"Checkpoint keys: {list(checkpoint.keys())}")
-        # Handle different checkpoint structures
         state_dict = None
         if 'state_dict' in checkpoint:
             print("Found 'state_dict' key in checkpoint")
@@ -67,7 +65,6 @@ def load_checkpoint(config):
             print("Using checkpoint directly as state_dict")
             state_dict = checkpoint
         
-        # Load state_dict into model
         model.load_state_dict(state_dict, strict=False)
         print("Checkpoint loaded successfully")
     except Exception as e:
@@ -160,6 +157,14 @@ def main():
         print(f"Failed to preprocess images: {str(e)}")
         raise
     
+    # Setup camera parameters (placeholder, to be refined)
+    num_views = images.shape[0]
+    cameras = torch.eye(4, device=device, dtype=torch.float16).unsqueeze(0).repeat(num_views, 1, 1)  # [num_views, 4, 4]
+    render_cameras = cameras.clone()  # Same as input cameras for now
+    render_size = 512  # From instant-mesh-large.yaml infer_config.render_resolution
+    
+    print(f"Cameras shape: {cameras.shape}, Render cameras shape: {render_cameras.shape}, Render size: {render_size}")
+    
     # Load model
     print("Loading InstantMesh model")
     try:
@@ -175,7 +180,7 @@ def main():
     print("Generating mesh")
     try:
         with torch.no_grad():
-            mesh_data = model(images)
+            mesh_data = model(images, cameras, render_cameras, render_size)
             print(f"Mesh data keys: {mesh_data.keys()}")
     except Exception as e:
         print(f"Failed to generate mesh: {str(e)}")
