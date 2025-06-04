@@ -76,15 +76,14 @@ def main():
         raise RuntimeError(f"Failed to initialize Zero123PlusPipeline: {str(e)}")
     
     # Generate multi-view images
+    with torch.no_grad():
+        mv_images = pipe(image).images[0]  # Shape: [6, H, W, 3]
+    
+    # Convert to tensor and resize
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize([0.5], [0.5])
     ])
-    image_tensor = transform(image).unsqueeze(0).to('cuda', torch.float16)
-    with torch.no_grad():
-        mv_images = pipe(image_tensor).images[0]  # Shape: [6, H, W, 3]
-    
-    # Resize and normalize
     images = torch.from_numpy(mv_images).permute(0, 3, 1, 2).to('cuda', torch.float16)
     images = v2.functional.resize(images, 320, interpolation=3, antialias=True).clamp(0, 1)
     
