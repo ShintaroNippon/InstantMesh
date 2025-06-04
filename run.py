@@ -77,15 +77,23 @@ def main():
     
     # Generate multi-view images
     with torch.no_grad():
-        mv_images = pipe(image).images[0]  # PIL Image
+        result = pipe(image)
+        mv_images = result.images  # List of PIL Images or single PIL Image
     
-    # Convert PIL Image to NumPy array and then to tensor
-    mv_images_np = np.array(mv_images)  # Convert PIL Image to NumPy array
+    # Convert to NumPy array
+    if isinstance(mv_images, list):
+        mv_images_np = np.stack([np.array(img) for img in mv_images])  # [num_views, H, W, C]
+    else:
+        mv_images_np = np.array(mv_images)[None, ...]  # Add batch dimension: [1, H, W, C]
+    
+    print(f"mv_images_np shape: {mv_images_np.shape}")
+    
+    # Convert to tensor and preprocess
     transform = transforms.Compose([
-        transforms.ToTensor(),
+        transforms.ToTensor(),  # Converts [H, W, C] to [C, H, W]
         transforms.Normalize([0.5], [0.5])
     ])
-    images = torch.from_numpy(mv_images_np).permute(0, 3, 1, 2).to('cuda', torch.float16)
+    images = torch.stack([transform(img) for img in mv_images_np]).to('cuda', torch.float16)  # [num_views, C, H, W]
     images = v2.functional.resize(images, 320, interpolation=3, antialias=True).clamp(0, 1)
     
     # Load model
@@ -104,5 +112,5 @@ def main():
     
     print(f"Saved mesh to {mesh_path}")
 
-if __name__ == '__main__':
+if __name__ == '__module__':
     main()
