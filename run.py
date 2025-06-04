@@ -7,11 +7,31 @@ import rembg
 from omegaconf import OmegaConf
 from torchvision import transforms
 import torchvision.transforms.v2 as v2
-from diffusers import DiffusionPipeline
 from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
-from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
-from zero123plus import Zero123PlusPipeline, EulerAncestralDiscreteScheduler
-from instant3d.utils import read_image, save_image, save_mesh, load_checkpoint
+import trimesh
+import xatlas
+from models.lrm import LargeResolutionModel  # Import LRM from local src
+
+def read_image(image_path):
+    return Image.open(image_path).convert('RGBA')
+
+def save_image(image, path):
+    image.save(path, format='PNG')
+
+def save_mesh(mesh_data, path, export_texmap=False):
+    mesh = trimesh.Trimesh(vertices=mesh_data['vertices'], faces=mesh_data['faces'])
+    if export_texmap and 'uvs' in mesh_data:
+        xatlas.parametrize(mesh, uvs=mesh_data['uvs'])
+    mesh.export(path)
+
+def load_checkpoint(config):
+    checkpoint_path = os.path.join(os.path.dirname(__file__), 'checkpoints', 'instant_mesh_large.ckpt')
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+    model = LargeResolutionModel(config.model).to('cpu')  # Initialize LRM
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    model.load_state_dict(checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint)
+    return model
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -64,7 +84,7 @@ def main():
     images = v2.functional.resize(images, 320, interpolation=3, antialias=True).clamp(0, 1)
     
     # Load model
-    model = load_checkpoint(config.model).to('cuda', torch.float16)
+    model = load_checkpoint(config).to('cuda', torch.float16)
     model.eval()
     
     # Generate mesh
@@ -72,7 +92,9 @@ def main():
         mesh_data = model(images)
     
     # Save mesh
-    mesh_path = os.path.join(args.output_path, os.path.splitext(os.path.basename(args.input_path))[0] + '.obj')
+    output_subdir = os.path.join(args.output_path, 'instant-mesh-large', 'meshes')
+    os.makedirs(output_subdir, exist_ok=True)
+    mesh_path = os.path.join(output_subdir, os.path.splitext(os.path.basename(args.input_path))[0] + '.obj')
     save_mesh(mesh_data, mesh_path, export_texmap=args.export_texmap)
     
     print(f"Saved mesh to {mesh_path}")
